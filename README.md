@@ -1,16 +1,1 @@
-# Notificaciones-Locales-
-Manera local Lenguajes:Python y Sql
-
-Copyright (c) 2026 Patricio Waston. Todos los derechos reservados / All Rights Reserved.
-
-🇺🇸 Queda estrictamente prohibida la copia, modificación, distribución, sublicencia 
-o uso comercial de este código fuente, total o parcialmente, sin el permiso 
-previo y por escrito del autor. Este repositorio se publica únicamente con fines 
-de visualización y evaluación de portafolio profesional.
-
-🇦🇷 The copying, modification, distribution, sublicensing, or commercial use of 
-this source code, in whole or in part, is strictly prohibited without the prior 
-written permission of the author. This repository is published solely for 
-visualization and professional portfolio evaluation purposes.
-
 
