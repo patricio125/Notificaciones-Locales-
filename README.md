@@ -1,5 +1,5 @@
 # Notificaciones-Locales-
-Manera local Lenguajes:Python y Sqll
+Manera local Lenguajes:Python y Sql
 
 Copyright (c) 2026 Patricio Waston. Todos los derechos reservados / All Rights Reserved.
 
