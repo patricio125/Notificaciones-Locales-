@@ -71,7 +71,7 @@ config_notificaciones = {
         "frases": {
             "es": [
                 "🌙 Has hecho un excelente trabajo hoy. ¡Que tengas un buen descanso!",
-                "✨ Momento de desconectar. Mañana seguimos advancing juntos.",
+                "✨ Momento de desconectar. Mañana seguimos avanzando juntos.",
                 "💤 Descansá bien, el aprendizaje también necesita su pausa."
             ],
             "en": [
@@ -80,43 +80,94 @@ config_notificaciones = {
                 "💤 Rest well, learning also needs its break."
             ]
         },
-        "horario": (22, 23)  # 10:00 PM - 11:00 PM
+        "horario": (22, 24)  # 10:00 PM - 12:00 AM
     }
 }
 
 ultima_categoria_lanzada = None
 
 
-def obtener_idioma_guardado():
-    """Lee el idioma activo guardado en la BD SQLite."""
+def _obtener_ruta_db(user_data_dir=None):
+    """Devuelve la ruta de dyslexialift.db evitando caer en '.' sin permisos en Android."""
+    if user_data_dir:
+        return os.path.join(user_data_dir, "dyslexialift.db")
+
     try:
         from kivy.app import App
         app = App.get_running_app()
-        dir_app = app.user_data_dir if app else "."
+        if app and getattr(app, "user_data_dir", None):
+            return os.path.join(app.user_data_dir, "dyslexialift.db")
     except Exception:
-        dir_app = "."
+        pass
 
-    db_path = os.path.join(dir_app, "dyslexialift.db")
-    if not os.path.exists(db_path):
-        db_path = "dyslexialift.db"
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+    candidata = os.path.join(base_dir, "dyslexialift.db")
+    if os.path.exists(candidata):
+        return candidata
 
+    return os.path.join(os.path.expanduser("~"), "dyslexialift.db")
+
+
+def _asegurar_tabla_ajustes(cur):
+    cur.execute("CREATE TABLE IF NOT EXISTS ajustes (clave TEXT PRIMARY KEY, valor TEXT)")
+
+
+def obtener_idioma_guardado(user_data_dir=None):
+    """Lee el idioma activo guardado en la BD SQLite."""
+    db_path = _obtener_ruta_db(user_data_dir)
     try:
-        if os.path.exists(db_path):
-            with sqlite3.connect(db_path, timeout=2.0) as cn:
-                cur = cn.cursor()
-                cur.execute("CREATE TABLE IF NOT EXISTS ajustes (clave TEXT PRIMARY KEY, valor TEXT)")
-                cur.execute("SELECT valor FROM ajustes WHERE clave = 'idioma'")
-                row = cur.fetchone()
-                if row and row[0]:
-                    return row[0].lower()
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        with sqlite3.connect(db_path, timeout=2.0) as cn:
+            cur = cn.cursor()
+            _asegurar_tabla_ajustes(cur)
+            cur.execute("SELECT valor FROM ajustes WHERE clave = 'idioma'")
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0].lower()
     except Exception as e:
         print(f"⚠️ Error leyendo idioma: {e}")
 
     return "es"
 
 
-def verificar_y_lanzar_notificacion(dt=None):
+def _leer_ultima_categoria_guardada(user_data_dir=None):
+    """Recupera la última categoría lanzada desde SQLite para evitar duplicados tras reinicios."""
+    db_path = _obtener_ruta_db(user_data_dir)
+    try:
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        with sqlite3.connect(db_path, timeout=2.0) as cn:
+            cur = cn.cursor()
+            _asegurar_tabla_ajustes(cur)
+            cur.execute("SELECT valor FROM ajustes WHERE clave = 'ultima_notif_cat'")
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0]
+    except Exception as e:
+        print(f"⚠️ Error leyendo última categoría: {e}")
+    return None
+
+
+def _guardar_ultima_categoria(categoria, user_data_dir=None):
+    db_path = _obtener_ruta_db(user_data_dir)
+    try:
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        with sqlite3.connect(db_path, timeout=2.0) as cn:
+            cur = cn.cursor()
+            _asegurar_tabla_ajustes(cur)
+            cur.execute(
+                "INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('ultima_notif_cat', ?)",
+                (categoria,),
+            )
+            cn.commit()
+    except Exception as e:
+        print(f"⚠️ Error guardando última categoría: {e}")
+
+
+def verificar_y_lanzar_notificacion(dt=None, user_data_dir=None):
     global ultima_categoria_lanzada
+
+    if ultima_categoria_lanzada is None:
+        ultima_categoria_lanzada = _leer_ultima_categoria_guardada(user_data_dir)
 
     hora_actual = datetime.now().hour
     cat_encontrada = None
@@ -127,8 +178,14 @@ def verificar_y_lanzar_notificacion(dt=None):
             cat_encontrada = cat
             break
 
-    if cat_encontrada and cat_encontrada != ultima_categoria_lanzada:
-        idioma = obtener_idioma_guardado()
+    if cat_encontrada is None:
+        if ultima_categoria_lanzada is not None:
+            ultima_categoria_lanzada = None
+            _guardar_ultima_categoria("", user_data_dir)
+        return
+
+    if cat_encontrada != ultima_categoria_lanzada:
+        idioma = obtener_idioma_guardado(user_data_dir)
         frases_dict = config_notificaciones[cat_encontrada]["frases"]
         lista_frases = frases_dict.get(idioma, frases_dict.get("es", []))
 
@@ -142,6 +199,7 @@ def verificar_y_lanzar_notificacion(dt=None):
                 timeout=10
             )
             ultima_categoria_lanzada = cat_encontrada
+            _guardar_ultima_categoria(cat_encontrada, user_data_dir)
             print(f"✅ Notificación lanzada [{cat_encontrada.upper()}] ({idioma.upper()}): {frase}")
         except Exception as e:
             print(f"⚠️ Error al lanzar notificación: {e}")
